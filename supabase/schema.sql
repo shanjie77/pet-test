@@ -88,7 +88,10 @@ begin
   if v_row.used >= v_row.max_uses then
     return jsonb_build_object(
       'ok', false,
-      'error', '这组卡密的 ' || v_row.max_uses || ' 次机会已用完，请联系客服'
+      'error', case when v_row.max_uses = 1
+                    then '这张卡密的测评机会已用完，请联系客服'
+                    else '这组卡密的 ' || v_row.max_uses || ' 次机会已用完，请联系客服'
+               end
     );
   end if;
 
