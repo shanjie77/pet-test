@@ -288,4 +288,39 @@ grant execute on function public.get_result(text)           to anon, authenticat
    -- update public.card_keys set max_uses = 1;
    -- 3) 想连已用次数一起清零（谨慎，等于把作废的卡密重新激活）
    -- update public.card_keys set max_uses = 1, used = 0;
+
+   ── G. 作废旧卡密、重新发一批（整批重来）──────────────────────────────
+   -- 改开头三个值即可：生成多少张 / 每张能用几次 / 批次备注
+   -- 注意：这会删掉库里全部卡密，不可撤销。删除前先跑 C 段导出 CSV 留底。
+   --       results 表没有外键指向 card_keys，所以已经测过的结果不会丢。
+   do $$
+   declare
+     v_count int  := 150;
+     v_uses  int  := 1;
+     v_batch text := '第二批';
+     v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+     v_code  text;
+     i       int;
+   begin
+     delete from public.card_keys;
+
+     for i in 1..v_count loop
+       loop
+         select string_agg(substr(v_alpha, 1 + floor(random() * length(v_alpha))::int, 1), '' order by g)
+           into v_code
+           from generate_series(1, 8) as g;
+         v_code := 'PET-' || v_code;
+         exit when not exists (select 1 from public.card_keys where code = v_code);
+       end loop;
+       insert into public.card_keys (code, max_uses, note) values (v_code, v_uses, v_batch);
+     end loop;
+   end $$;
+
+   -- 顺便把「以后新建卡密」的默认次数也定为 1 次
+   alter table public.card_keys alter column max_uses set default 1;
+
+   -- 列出新卡密（右上角 Export → CSV 导出清单）
+   select code, max_uses, note
+     from public.card_keys
+    order by created_at desc;
    ========================================================================== */

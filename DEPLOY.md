@@ -284,6 +284,55 @@ select payload ->> 'r' as result_id, count(*) as hits
   from public.results group by 1 order by hits desc;
 ```
 
+### 4. 整批重来：作废旧卡密、重新发一批
+
+**先用上一段的查询导出 CSV 留底**（万一旧卡密已经发出去过），再跑下面这段。
+
+它会**清空 `card_keys` 表全部卡密**，然后生成一整套新的。改开头三个值即可：
+
+```sql
+do $$
+declare
+  v_count int  := 150;          -- 生成多少张
+  v_uses  int  := 1;            -- 每张能用几次
+  v_batch text := '第二批';      -- 批次备注
+  v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  v_code  text;
+  i       int;
+begin
+  delete from public.card_keys;   -- ← 旧卡密在这一行被全部删除，不可撤销
+
+  for i in 1..v_count loop
+    loop
+      select string_agg(substr(v_alpha, 1 + floor(random() * length(v_alpha))::int, 1), '' order by g)
+        into v_code
+        from generate_series(1, 8) as g;
+      v_code := 'PET-' || v_code;
+      exit when not exists (select 1 from public.card_keys where code = v_code);
+    end loop;
+    insert into public.card_keys (code, max_uses, note) values (v_code, v_uses, v_batch);
+  end loop;
+end $$;
+
+alter table public.card_keys alter column max_uses set default 1;
+
+select code, max_uses, note
+  from public.card_keys
+ order by created_at desc;
+```
+
+跑完列出新卡密，右上角 **`Export` → `CSV`** 导出。
+
+**三个要点：**
+
+- **删卡密不会丢测评结果。** `results` 表和 `card_keys` 表之间没有外键，旧卡密被删掉后，已经生成的分享链接（`?r=xxxx`）依然打得开。
+- **旧卡密立刻失效**，填进网站会提示「卡密不存在」。已经发出去的旧卡密同时作废 —— 确认没人在用再清。
+- **重复跑不会叠加。** 这段自带 `delete`，跑几次结果都是一批新卡密，不会越跑越多。
+
+**只想改旧卡密的次数、不想换码** → 用上一节的 `update public.card_keys set max_uses = 1;`。
+
+**只想废掉、暂时不发新的** → 跑 `delete from public.card_keys;`（或 `update public.card_keys set disabled = true;` 保留可恢复）。
+
 > **两个关键认知**
 >
 > **改卡密不用重新部署网站。** 卡密存在 Supabase 里，每次输入卡密都是实时查库。
