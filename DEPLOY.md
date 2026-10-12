@@ -44,44 +44,15 @@
 
 ### 3. 导入卡密
 
-在上一步的 SQL Editor 里**新开一个 query**，跑下面任意一段。
+在上一步的 SQL Editor 里**新开一个 query**，把本文档 [第五章 · 1. 新增卡密](#1-新增卡密)
+那段 SQL 整段粘进去跑一遍即可。
 
-把本地已有的 5 张示例卡密搬过来：
+它会在库里生成一批随机卡密（`PET-` + 8 位，字母表已去掉易混的 `0` `1` `I` `O`），
+**默认每张只能用 1 次**，也就是一张卡密换一次完整测评。改 SQL 开头三个值就能调整
+张数、每张次数和批次备注。生成后直接点结果表右上角的 `Download CSV` 导出成清单。
 
-```sql
-insert into public.card_keys (code, max_uses, note) values
-  ('PET-001', 3, '示例卡密'),
-  ('PET-002', 3, '示例卡密'),
-  ('PET-003', 3, '示例卡密'),
-  ('PET-004', 3, '示例卡密'),
-  ('PET-005', 3, '示例卡密')
-on conflict (code) do nothing;
-```
-
-生成 50 张新卡密（8 位随机，不可猜测，建议正式售卖用这种）：
-
-```sql
-do $$
-declare
-  v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  v_code  text;
-  i       int;
-begin
-  for i in 1..50 loop
-    loop
-      select string_agg(substr(v_alpha, 1 + floor(random() * length(v_alpha))::int, 1), '' order by g)
-        into v_code
-        from generate_series(1, 8) as g;
-      v_code := 'PET-' || v_code;
-      exit when not exists (select 1 from public.card_keys where code = v_code);
-    end loop;
-    insert into public.card_keys (code, max_uses, note) values (v_code, 3, '首发批次');
-  end loop;
-end $$;
-```
-
-> **重要**：正式售卖请务必用随机卡密，不要用 `PET-001` 这种可猜的编号。
-> 校验函数是公开可调的，编号太短太规律，别人可以暴力枚举。
+> **重要**：正式售卖请务必用随机卡密，不要用 `PET-001` 这种连号 ——
+> 校验函数是公开可调的，连号别人从 `001` 枚举到 `099` 就白嫖了。
 
 ### 4. 抄走两个值
 
@@ -170,11 +141,13 @@ GitHub 会自动重新部署，1 分钟左右生效。**不需要**手动上传�
 打开网址，依次确认：
 
 1. 输错卡密 → 提示"卡密不存在"（不是放行进入）
-2. 输对的卡密 → 进入说明页，显示"剩余次数：3 次"
+2. 输对的卡密 → 进入说明页，显示"剩余次数：1 次"
 3. 答完 30 题 → 出结果页，**卡通形象正常显示**
 4. 点"保存测试结果" → 生成一张长图，移动端可长按存相册
 5. 点"复制结果链接" → 新开无痕窗口打开该链接 → 能只读看到同一份结果
-6. 回 Supabase → `Table Editor` → `card_keys`，该卡密的 `used` 变成了 1
+6. **刷新结果页 → 仍能回到同一份结果**（地址栏此时已自动带上 `?r=xxxx`），
+   昵称与交卷时一致。卡密是有限次的，这一条必须成立，否则用户刷新一下就白测了
+7. 回 Supabase → `Table Editor` → `card_keys`，该卡密的 `used` 变成了 1
 
 ---
 
@@ -200,7 +173,7 @@ GitHub 会自动重新部署，1 分钟左右生效。**不需要**手动上传�
 do $$
 declare
   v_count int  := 50;          -- 生成多少张
-  v_uses  int  := 3;           -- 每张能用几次
+  v_uses  int  := 1;           -- 每张能用几次（1 = 一张卡密换一次完整测评）
   v_batch text := '首发批次';   -- 备注：渠道 / 批次 / 买家
   v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
   v_code  text;
@@ -240,7 +213,38 @@ on conflict (code) do nothing;
 > 卡密建议保持 **`PET-` 前缀 + 8 位随机**。随机部分取自去掉易混字符 `0` `1` `I` `O`
 > 的 32 字母表，比 `PET-001` 这种连号安全得多 —— 连号别人从 `PET-001` 试到 `PET-099` 就白嫖到了。
 
-### 2. 查看与调整
+### 2. 改次数：一张一次 / 一张多次
+
+**把已有卡密改成「一张只能用一次」：**
+
+```sql
+-- 改列默认值：以后新建的卡密默认就是 1 次
+alter table public.card_keys alter column max_uses set default 1;
+
+-- 把库里已有的卡密也改成 1 次。
+-- 注意：已经用过 1 次以上的会因此变成「已用完」＝作废，这通常正是想要的效果。
+update public.card_keys set max_uses = 1;
+```
+
+**想反过来放宽（比如一张卡密能测 3 次）：**
+
+```sql
+alter table public.card_keys alter column max_uses set default 3;
+update public.card_keys set max_uses = 3, used = 0;   -- used 一起清零，等于全部重新激活
+```
+
+只改个别几张：
+
+```sql
+update public.card_keys set max_uses = 3
+ where code in ('PET-XXXXXXXX', 'PET-YYYYYYYY');
+```
+
+> **扣次数的时机**：只有**答完最后一题、出结果页**的那一刻才扣 1 次。
+> 输入卡密、答题中途退出、刷新页面、返回上一题 —— 全都不消耗次数。
+> 所以用户不会因为手滑白白浪费一张卡密。
+
+### 3. 查看与调整
 
 **看每张卡密的剩余次数：**
 

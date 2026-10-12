@@ -10,6 +10,7 @@
   const state = {
     password: '',
     remaining: null,
+    limit: null,
     answers: {},
     flow: [],
     idx: 0,
@@ -22,6 +23,18 @@
   };
 
   const EGG_BY_Q = { Q10: MID_EGGS[10], Q16: MID_EGGS[16], Q21: MID_EGGS[21] };
+
+  // 昵称改为由「结果指纹」决定，不再随机：卡密是有限次的，用户刷新后用 ?r= 重开结果页时，
+  // 显示的昵称必须和交卷那一刻看到的一致。同一份结果 → 同一个种子 → 同一个昵称。
+  function pickNick(nickStyle, seed) {
+    const names = NICKNAMES[nickStyle] || NICKNAMES.A;
+    const s = String(seed == null ? '' : seed);
+    let h = 0;
+    for (let i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    }
+    return names[h % names.length];
+  }
 
   /* ---------------- 工具 ---------------- */
   function show(id) {
@@ -107,8 +120,13 @@
     PetAPI.auth(pw).then(function (res) {
       state.password = pw;
       state.remaining = (typeof res.remaining === 'number') ? res.remaining : null;
+      state.limit = (typeof res.limit === 'number') ? res.limit : null;
       $('#pw-hint').textContent = '解锁成功';
-      $('#intro-remaining').textContent = '剩余次数：' + (state.remaining == null ? '—' : state.remaining) + ' 次';
+      const remTxt = '剩余次数：' + (state.remaining == null ? '—' : state.remaining + ' 次');
+      // 一次性的卡密要在开始前就把话说明白，否则用户答完不保存就真的没了
+      $('#intro-remaining').textContent = (state.limit === 1 && state.remaining === 1)
+        ? remTxt + '（用完即失效，答完请及时保存结果）'
+        : remTxt;
       show('view-intro');
     }).catch(function (err) {
       // 业务拒绝（卡密不存在 / 次数已用完）—— 直接提示，不放行
@@ -137,6 +155,10 @@
     state.idx = 0;
     state.match = null;
     state.cardData = null;
+    // 开始新一次测评时清掉地址栏里的 ?r=，避免中途刷新跳回上一次的结果页
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', location.pathname);
+    }
     rebuildFlow();
     show('view-quiz');
     renderQuestion();
@@ -245,6 +267,11 @@
       PetAPI.submit(state.password, payload).then(function (res) {
         state.shareUrl = location.origin + location.pathname + '?r=' + res.id;
         if (typeof res.remaining === 'number') state.remaining = res.remaining;
+        // 卡密有限次，必须把结果链接写进地址栏：这样用户刷新或误关页面后，
+        // 还能靠 ?r= 重新打开这份结果（只读），不至于白测一次。
+        if (res.id && window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', location.pathname + '?r=' + res.id);
+        }
         paintShareUrl();
       }).catch(function (err) {
         if (REMOTE) {
@@ -268,7 +295,7 @@
     const nickStyle = state.answers.Q23 || 'A';
     const names = NICKNAMES[nickStyle] || NICKNAMES.A;
     if (!state.nickname || names.indexOf(state.nickname) < 0) {
-      state.nickname = names[Math.floor(Math.random() * names.length)];
+      state.nickname = pickNick(nickStyle, r.id + '|' + m.mainPct);
     }
     return {
       date: todayStr(),
@@ -481,11 +508,11 @@
       if (readonly) {
         show('view-lock');
         $('#pw-input').value = '';
-        $('#pw-hint').textContent = '每组卡密可测评 3 次，请勿外传';
+        $('#pw-hint').textContent = '每组卡密仅限本人使用，请勿外传';
         return;
       }
       if (typeof state.remaining === 'number' && state.remaining <= 0) {
-        openModal('次数已用完', '<p>本组卡密的 3 次测评机会已经用完啦。</p>' +
+        openModal('次数已用完', '<p>这张卡密的测评机会已经用完啦。</p>' +
           '<div class="step">想再测一次，或者分享给朋友一起测，可以在店铺下单获取新的卡密。</div>' +
           '<p style="color:var(--muted);font-size:13.5px">如果你觉得这个测评有帮助，也欢迎给个好评支持一下 🌿</p>',
           [{ label: '我知道了', primary: true }]);
@@ -604,7 +631,6 @@
 
     const nickStyle = p.n || 'A';
     const names = NICKNAMES[nickStyle] || NICKNAMES.A;
-
     const c = {
       date: todayStr(),
       title: main.title,
@@ -621,7 +647,7 @@
       legal: main.legal,
       quote: main.quote,
       knowledge: main.knowledge,
-      nick: names[0],
+      nick: pickNick(nickStyle, p.r + '|' + p.p),
       nickList: names,
       nickStyle: nickStyle,
       moment: MOMENTS[p.f] || null,

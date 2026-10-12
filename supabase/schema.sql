@@ -23,7 +23,7 @@ create extension if not exists pgcrypto;
 -- ---------------------------------------------------------------------------
 create table if not exists public.card_keys (
   code          text primary key,               -- 卡密，统一存大写
-  max_uses      int         not null default 3, -- 可用次数
+  max_uses      int         not null default 1, -- 可用次数（默认 1 次：一张卡密一次完整测评）
   used          int         not null default 0, -- 已用次数
   disabled      boolean     not null default false,
   note          text,                           -- 备注：批次、渠道、买家等
@@ -31,7 +31,10 @@ create table if not exists public.card_keys (
   last_used_at  timestamptz
 );
 
-comment on table public.card_keys is '测评卡密，每张默认可测 3 次';
+comment on table public.card_keys is '测评卡密，每张默认可测 1 次（一张卡密 = 一次完整测评）';
+
+-- 扣次数的唯一时机：submit_result（答完最后一题、出结果页时）。
+-- auth_card 只读校验、不扣次；答题中途退出、刷新、返回上一题都不消耗次数。
 
 
 -- ---------------------------------------------------------------------------
@@ -213,21 +216,25 @@ grant execute on function public.get_result(text)           to anon, authenticat
 
    ── A. 把本地已有的 5 张示例卡密搬过来 ────────────────────────────────
    insert into public.card_keys (code, max_uses, note) values
-     ('PET-001', 3, '示例卡密'),
-     ('PET-002', 3, '示例卡密'),
-     ('PET-003', 3, '示例卡密'),
-     ('PET-004', 3, '示例卡密'),
-     ('PET-005', 3, '示例卡密')
+     ('PET-001', 1, '示例卡密'),
+     ('PET-002', 1, '示例卡密'),
+     ('PET-003', 1, '示例卡密'),
+     ('PET-004', 1, '示例卡密'),
+     ('PET-005', 1, '示例卡密')
    on conflict (code) do nothing;
 
-   ── B. 批量生成 50 张新卡密（8 位随机，不可猜测）──────────────────────
+   ── B. 批量生成一批新卡密（8 位随机，字母表已去掉易混的 0/1/I/O）──────
+   --   改开头三个值即可：生成多少张 / 每张能用几次 / 批次备注
    do $$
    declare
+     v_count int  := 50;
+     v_uses  int  := 1;
+     v_batch text := '首发批次';
      v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
      v_code  text;
      i       int;
    begin
-     for i in 1..50 loop
+     for i in 1..v_count loop
        loop
          select string_agg(substr(v_alpha, 1 + floor(random() * length(v_alpha))::int, 1), '' order by g)
            into v_code
@@ -235,9 +242,15 @@ grant execute on function public.get_result(text)           to anon, authenticat
          v_code := 'PET-' || v_code;
          exit when not exists (select 1 from public.card_keys where code = v_code);
        end loop;
-       insert into public.card_keys (code, max_uses, note) values (v_code, 3, '首发批次');
+       insert into public.card_keys (code, max_uses, note) values (v_code, v_uses, v_batch);
      end loop;
    end $$;
+
+   -- 紧接着列出这批卡密，右上角 Download CSV 可导出清单发给买家
+   select code, max_uses, note
+     from public.card_keys
+    where note = '首发批次'
+    order by created_at desc;
 
    ── C. 查看每张卡密的剩余次数 ────────────────────────────────────────
    select code,
@@ -251,8 +264,8 @@ grant execute on function public.get_result(text)           to anon, authenticat
     order by created_at desc;
 
    ── D. 给某位买家补次数 / 停用 ───────────────────────────────────────
-   -- update public.card_keys set max_uses = max_uses + 3 where code = 'PET-XXXXXXXX';
-   -- update public.card_keys set disabled = true            where code = 'PET-XXXXXXXX';
+   -- update public.card_keys set max_uses = max_uses + 1 where code = 'PET-XXXXXXXX';
+   -- update public.card_keys set disabled = true          where code = 'PET-XXXXXXXX';
 
    ── E. 看看有多少人测过、都测出了什么 ────────────────────────────────
    select count(*)                                                as total,
@@ -263,4 +276,13 @@ grant execute on function public.get_result(text)           to anon, authenticat
      from public.results
     group by 1
     order by hits desc;
+
+   ── F. 把卡密改成「一张只能用一次」────────────────────────────────────
+   -- 1) 改列默认值：以后新建的卡密默认就是 1 次
+   -- alter table public.card_keys alter column max_uses set default 1;
+   -- 2) 把库里已有的卡密也改成 1 次
+   --    （已经用过 1 次以上的会因此变成「已用完」，等同于作废，这通常正是想要的效果）
+   -- update public.card_keys set max_uses = 1;
+   -- 3) 想连已用次数一起清零（谨慎，等于把作废的卡密重新激活）
+   -- update public.card_keys set max_uses = 1, used = 0;
    ========================================================================== */
