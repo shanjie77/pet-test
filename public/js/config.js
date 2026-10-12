@@ -17,6 +17,6 @@
    方便本地开发调试。
    ========================================================================== */
 window.SUPABASE_CONFIG = {
-  url: '',
-  anonKey: ''
+  url: 'https://hmzwlraakrgtwgokbftp.supabase.co',
+  anonKey: 'sb_publishable_3FaqBb4MPgn9rKr_R4Uu2g_TWx-jM_r'
 };
