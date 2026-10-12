@@ -180,7 +180,67 @@ GitHub 会自动重新部署，1 分钟左右生效。**不需要**手动上传�
 
 ## 五、日常运维
 
-都在 Supabase 的 SQL Editor 里跑。
+### 0. 先进到 SQL Editor
+
+1. 打开 <https://supabase.com/dashboard>，登录你自己的账号
+2. 在项目列表里点进 **pet-test** 这个项目
+3. 左侧竖排图标里找 **`SQL Editor`**（图标长得像个 `>_` 终端窗口），点它
+4. 点 **`New query`**（右上角），把下面的 SQL 粘进去
+5. 按 **`Ctrl + Enter`**（或点右下角 `Run`）执行
+
+> 不想记路径的话，直接开这个链接会跳到你的项目：
+> <https://supabase.com/dashboard/project/hmzwlraakrgtwgokbftp>
+> 进去后照样点左侧的 `SQL Editor`。
+
+### 1. 新增卡密
+
+**一次生成一批（推荐）**——改开头三行数字就行：
+
+```sql
+do $$
+declare
+  v_count int  := 50;          -- 生成多少张
+  v_uses  int  := 3;           -- 每张能用几次
+  v_batch text := '首发批次';   -- 备注：渠道 / 批次 / 买家
+  v_alpha text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  v_code  text;
+  i       int;
+begin
+  for i in 1..v_count loop
+    loop
+      select string_agg(substr(v_alpha, 1 + floor(random() * length(v_alpha))::int, 1), '' order by g)
+        into v_code
+        from generate_series(1, 8) as g;
+      v_code := 'PET-' || v_code;
+      exit when not exists (select 1 from public.card_keys where code = v_code);
+    end loop;
+    insert into public.card_keys (code, max_uses, note) values (v_code, v_uses, v_batch);
+  end loop;
+end $$;
+
+select code, max_uses, note
+  from public.card_keys
+ where note = '首发批次'
+ order by created_at desc;
+```
+
+结果表格出来后，右上角有 `Download CSV` 可以把卡密清单导出成表格发给买家。
+
+**只加一张指定的**（比如给老客户定制）：
+
+```sql
+insert into public.card_keys (code, max_uses, note)
+values ('PET-VIP001', 5, '老客户赠送')
+on conflict (code) do nothing;
+```
+
+**图形界面方式**（不想写 SQL 时）：左侧点 **`Table Editor`** → 选 `card_keys` 表 →
+点 `Insert row` → 填 `code` / `max_uses` / `note` → 保存。
+
+> 卡密建议保持 **`PET-` 前缀 + 8 位随机**。随机部分取自去掉易混字符 `0` `1` `I` `O`
+> 的 32 字母表，比 `PET-001` 这种连号安全得多 —— 连号别人从 `PET-001` 试到 `PET-099` 就白嫖到了。
+
+### 2. 查看与调整
 
 **看每张卡密的剩余次数：**
 
@@ -197,33 +257,7 @@ update public.card_keys set max_uses = max_uses + 3 where code = 'PET-XXXXXXXX';
 update public.card_keys set disabled = true          where code = 'PET-XXXXXXXX';
 ```
 
-**看有多少人测过、都测出了什么：**
-
-```sql
-select count(*) as total,
-       count(*) filter (where created_at > now() - interval '1 day') as today
-  from public.results;
-
-select payload ->> 'r' as result_id, count(*) as hits
-  from public.results group by 1 order by hits desc;
-```
-
-**想改每个卡密默认给几次**：新建卡密时把 `max_uses` 写成别的数就行。
-
-**手动加一张指定卡密：**
-
-```sql
-insert into public.card_keys (code, max_uses, note)
-values ('PET-VIP001', 5, '老客户赠送')
-on conflict (code) do nothing;
-```
-
-**批量生成 50 张随机卡密**（8 位，字母表已去掉易混的 `0` `1` `I` `O`，猜不出来）：
-
-见 `supabase/schema.sql` 末尾「运维操作」的 **B 段**，整段复制到 SQL Editor 跑即可。
-生成后把 `note` 改成批次名（如 `'首发批次'`），方便以后区分渠道。
-
-**把某张卡密的次数归零**（买家反馈没测够，给个顺水人情）：
+**把某张卡密的已用次数归零：**
 
 ```sql
 update public.card_keys set used = 0 where code = 'PET-XXXXXXXX';
@@ -235,10 +269,22 @@ update public.card_keys set used = 0 where code = 'PET-XXXXXXXX';
 update public.card_keys set used = 0;
 ```
 
+**看有多少人测过、都测出了什么：**
+
+```sql
+select count(*) as total,
+       count(*) filter (where created_at > now() - interval '1 day') as today
+  from public.results;
+
+select payload ->> 'r' as result_id, count(*) as hits
+  from public.results group by 1 order by hits desc;
+```
+
 > **两个关键认知**
 >
 > **改卡密不用重新部署网站。** 卡密存在 Supabase 里，每次输入卡密都是实时查库。
 > 增删改完立刻生效，不需要碰 GitHub、不需要等部署、不需要改任何一行前端代码。
+> 新增卡密后，直接打开网站输一下就知道了。
 >
 > **`data/passwords.json` 和线上无关。** 那是本地调试（`npm start`）时读的文件，
 > 线上版本完全不读它。它也已经被 `.gitignore` 排除，没有上传到 GitHub。
