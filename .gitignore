@@ -1,0 +1,14 @@
+# ---- 敏感数据：绝对不能推到公开仓库 ----
+# data/passwords.json 里是全部卡密，一旦公开等于免费放送
+data/
+
+# ---- 本地产物，没必要上传 ----
+shots/
+img-src-backup/
+node_modules/
+*.log
+
+# ---- 系统文件 ----
+.DS_Store
+Thumbs.db
+desktop.ini

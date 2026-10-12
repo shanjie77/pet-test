@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#FFF8F0">
+<title>测你适合养什么宠物 · 宠物人格测评</title>
+<!-- 付费卡密站点，不让搜索引擎收录；想开放收录删掉这一行即可 -->
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ 1. 密码门 ============ -->
+  <section class="view is-active" id="view-lock">
+    <div class="lock-wrap">
+      <div class="lock-deco">🐾</div>
+      <div class="brand">宠物人格测评</div>
+      <h1 class="lock-title">测你适合养什么宠物</h1>
+      <p class="lock-sub">30 道生活情境题 · 24 种人宠关系人格<br>附合法饲养红线与避坑指南</p>
+      <div class="field">
+        <input id="pw-input" type="text" placeholder="请输入卡密" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button id="pw-btn" class="btn btn-primary">开始解锁</button>
+      </div>
+      <p class="hint" id="pw-hint">每组卡密可测评 3 次，请勿外传</p>
+    </div>
+  </section>
+
+  <!-- ============ 2. 说明页 ============ -->
+  <section class="view" id="view-intro">
+    <div class="intro-wrap">
+      <div class="intro-badge">已解锁</div>
+      <h2 class="intro-title">在开始之前，先说三件事</h2>
+      <ul class="intro-list">
+        <li><b>这是趣味测评，不是诊断。</b>它帮你判断"适不适合"，但不构成兽医、医学或心理学建议。</li>
+        <li><b>请诚实作答。</b>30 道题里有几道是交叉验证的，美化答案只会得到假结果。</li>
+        <li><b>最后一题会劝退一部分人。</b>如果你拿到「云吸选手」，那不是失败，是这个测评最负责任的一个答案。</li>
+      </ul>
+      <div class="intro-meta">
+        <span id="intro-remaining">剩余次数：-</span>
+        <span class="dot">·</span>
+        <span>约 4 分钟</span>
+      </div>
+      <button id="start-btn" class="btn btn-primary btn-lg">开始测评</button>
+      <p class="hint">每组卡密可测评 3 次</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. 答题页 ============ -->
+  <section class="view" id="view-quiz">
+    <header class="quiz-head">
+      <button id="q-back" class="icon-btn" aria-label="上一题">←</button>
+      <div class="progress"><div class="progress-bar" id="q-bar"></div></div>
+      <div class="progress-idx" id="q-idx">1/30</div>
+    </header>
+    <p class="progress-text" id="q-progress-text"></p>
+    <div class="q-body">
+      <div class="q-part" id="q-part"></div>
+      <h2 class="q-text" id="q-text"></h2>
+      <div class="q-options" id="q-options"></div>
+    </div>
+  </section>
+
+  <!-- ============ 4. 计算中 ============ -->
+  <section class="view" id="view-loading">
+    <div class="loading-wrap">
+      <div class="loading-pet">🐾</div>
+      <p class="loading-text" id="loading-text">正在把你和全国 24 种宠物做匹配…</p>
+      <div class="loading-bar"><span></span></div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 结果页 ============ -->
+  <section class="view" id="view-result">
+    <div class="shared-banner" id="shared-banner" hidden>这是好友分享给你的结果 · 你也可以测一份自己的</div>
+    <div id="result-body"></div>
+  </section>
+
+</div>
+
+<!-- ============ 弹层 ============ -->
+<div class="modal-mask" id="modal-mask" hidden>
+  <div class="modal" id="modal">
+    <h3 class="modal-title" id="modal-title"></h3>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<div class="egg-toast" id="egg-toast" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/results.js"></script>
+<script src="js/questions.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/canvas.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
