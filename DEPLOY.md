@@ -210,6 +210,40 @@ select payload ->> 'r' as result_id, count(*) as hits
 
 **想改每个卡密默认给几次**：新建卡密时把 `max_uses` 写成别的数就行。
 
+**手动加一张指定卡密：**
+
+```sql
+insert into public.card_keys (code, max_uses, note)
+values ('PET-VIP001', 5, '老客户赠送')
+on conflict (code) do nothing;
+```
+
+**批量生成 50 张随机卡密**（8 位，字母表已去掉易混的 `0` `1` `I` `O`，猜不出来）：
+
+见 `supabase/schema.sql` 末尾「运维操作」的 **B 段**，整段复制到 SQL Editor 跑即可。
+生成后把 `note` 改成批次名（如 `'首发批次'`），方便以后区分渠道。
+
+**把某张卡密的次数归零**（买家反馈没测够，给个顺水人情）：
+
+```sql
+update public.card_keys set used = 0 where code = 'PET-XXXXXXXX';
+```
+
+**全部卡密一键复位**（只在测试阶段用，上线后别乱跑）：
+
+```sql
+update public.card_keys set used = 0;
+```
+
+> **两个关键认知**
+>
+> **改卡密不用重新部署网站。** 卡密存在 Supabase 里，每次输入卡密都是实时查库。
+> 增删改完立刻生效，不需要碰 GitHub、不需要等部署、不需要改任何一行前端代码。
+>
+> **`data/passwords.json` 和线上无关。** 那是本地调试（`npm start`）时读的文件，
+> 线上版本完全不读它。它也已经被 `.gitignore` 排除，没有上传到 GitHub。
+> 线上唯一认的卡密库，永远只有 Supabase 的 `card_keys` 表。
+
 ---
 
 ## 六、需要知道的边界
